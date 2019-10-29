@@ -1,0 +1,136 @@
+echo "Make sure to put EnvConstants.env to Stage/Production before performing this script"
+
+echo "Select the number of the lambda you would like to deploy:"
+echo "1 - VPC Get Lambda"
+echo "2 - VPC Post Lambda"
+echo "3 - VPC Put Lambda"
+echo "4 - VPC AMA Notification Lambda"
+echo "5 - VPC Invoker Lambda"
+echo "6 - Network Lambda"
+echo "7 - !! All Lambdas !!"
+printf "\\"
+read lambdaType
+
+lambdaName=""
+envName=""
+
+if [ $lambdaType == 1 ]
+then 
+	 lambdaName="GetLambdaRequestVPC"
+elif [ $lambdaType == 2 ]
+then 
+	lambdaName="PostLambdaRequestVPC"
+elif [ $lambdaType == 3 ]
+then 
+	lambdaName="PutLambdaRequestVPC"
+elif [ $lambdaType == 4 ]
+then 
+	lambdaName="AMANotificationsManagerVPC"
+elif [ $lambdaType == 5 ] 
+then
+	lambdaName="LambdasInvoker"
+elif [ $lambdaType == 6 ] 
+then
+	lambdaName="NetworkLambda"
+elif [ $lambdaType == 7 ] 
+then
+	lambdaName="All lambdas"
+else
+	echo "wrong input!"
+	exit 1
+fi
+
+echo "you selected - $lambdaName"
+
+
+echo "Select the number of the environment you would like to deploy to:"
+echo "1 - Producation"
+echo "2 - Stage"
+printf "\\"
+read envType
+
+if [ $envType == 1 ]
+then 
+	envName="PRODUCTION"
+elif [ $envType == 2 ]
+then
+	envName="STAGE"
+else
+	echo "wrong input!"
+	exit 1
+fi
+
+echo "you selected - $envName"
+
+printf "Type version(e.g - 1_0_1): -> "
+read version_name
+
+printf "deploying $lambdaName to $envName with version $version_name(y/n)?"
+read answer
+if [ $answer != 'y' ]
+then 
+	exit 1
+fi
+
+function createAliases(){
+	echo "creating alias $1 for $2. version number $3"
+
+	echo "v_number $v_number"
+	aws lambda create-alias --region us-west-2 --function-name $2 --description "$1 environment" --function-version $(echo $3 | bc) --name "$1" --profile cli
+}
+
+function publishVersion(){
+	version_number=""
+	
+	json=$(aws lambda publish-version --region us-west-2 --description $version_name --function-name $1 --profile cli)
+	sleep 5
+
+	# seperating verion into version_number -> result "12}"
+	from_version_number=$( echo $json |  grep -o 'Version.*' | cut -f2- -d:)
+
+	# the rest of the json from version number
+	version_number="$( cut -d ',' -f 1 <<< "$from_version_number" )";
+	# make number instead of int
+
+	echo $version_number
+}
+
+if [ "$lambdaType" = '7' ]
+then 
+	version_number_get=$(publishVersion 'GetLambdaRequestVPC')
+	version_number_post=$(publishVersion 'PostLambdaRequestVPC')
+	version_number_put=$(publishVersion 'PutLambdaRequestVPC')
+	version_number_ama=$(publishVersion 'AMANotificationsManagerVPC')
+	version_number_invoker=$(publishVersion 'LambdasInvoker')
+	version_number_network=$(publishVersion 'NetworkLambda')
+
+	createAliases "$envName-$version_name" 'GetLambdaRequestVPC' ${version_number_get#0}
+	createAliases "$envName-$version_name" 'PostLambdaRequestVPC' ${version_number_post#0}
+	createAliases "$envName-$version_name" 'PutLambdaRequestVPC' ${version_number_put#0}
+	createAliases "$envName-$version_name" 'AMANotificationsManagerVPC' ${version_number_ama#0}
+	createAliases "$envName-$version_name" 'LambdasInvoker' ${version_number_invoker#0}
+	createAliases "$envName-$version_name" 'NetworkLambda' ${version_number_network#0}
+
+else 
+	lambda_ver=$(publishVersion "$lambdaName")
+	createAliases "$envName-$version_name" "$lambdaName" ${lambda_ver#0}
+fi
+
+
+echo '* do not forget to remove old versions(aliases) that are not longer in use'
+
+if [ "$lambdaType" == '5' ] || [ "$lambdaType" = '7' ];
+then
+	echo '* Create ping role for InvokerLambda'
+fi
+
+if [ "$lambdaType" == '4' ] || [ "$lambdaType" = '7' ];
+then
+	echo '* Create ping role for AMANotificationManager'
+fi
+
+
+if [ "$lambdaType" == '6' ] || [ "$lambdaType" = '7' ];
+then
+	echo '* Create new S3Event because you created new NetworkLambda version'
+fi

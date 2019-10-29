@@ -1,0 +1,93 @@
+envName=""
+
+function removeAliases(){
+	echo "deleting alias $1 from $2"
+	aws lambda delete-alias --function-name "$2" --name "$1" --profile cli
+}
+
+
+echo "Select the number of the lambda you would like to remove alias version from:"
+echo "1 - VPC Get Lambda"
+echo "2 - VPC Post Lambda"
+echo "3 - VPC Put Lambda"
+echo "4 - VPC AMA Notification Lambda"
+echo "5 - VPC Invoker Lambda"
+echo "6 - Network Lambda"
+echo "7 - !! All Lambdas !!"
+printf "\\"
+read lambdaType
+
+lambdaName=""
+
+if [ $lambdaType == 1 ]
+then 
+	 lambdaName="GetLambdaRequestVPC"
+elif [ $lambdaType == 2 ]
+then 
+	lambdaName="PostLambdaRequestVPC"
+elif [ $lambdaType == 3 ]
+then 
+	lambdaName="PutLambdaRequestVPC"
+elif [ $lambdaType == 4 ]
+then 
+	lambdaName="AMANotificationsManagerVPC"
+elif [ $lambdaType == 5 ] 
+then
+	lambdaName="LambdasInvoker"
+elif [ $lambdaType == 6 ] 
+then
+	lambdaName="NetworkLambda"
+elif [ $lambdaType == 7 ] 
+then
+	lambdaName="All lambdas"
+else
+	echo "wrong input!"
+	exit 1
+fi
+
+echo "you selected - $lambdaName"
+
+
+echo "select the number of the environment you would like to remove the alias from:"
+echo "1 - Producation"
+echo "2 - Stage"
+printf "\\"
+read envType
+
+
+if [ $envType == 1 ]
+then 
+	envName="PRODUCTION"
+elif [ $envType == 2 ]
+then
+	envName="STAGE"
+else
+	echo "wrong input!"
+	exit 1
+fi
+
+echo "you selected - $envName"
+
+printf "Type version to remove(e.g - 1_0_2): -> "
+read version_name
+
+printf "remove version $version_name from lambda $lambdaName in $envName(y/n)?"
+
+read answer
+if [ $answer != 'y' ]
+then 
+	exit 1
+fi
+
+
+if [ "$lambdaType" = '7' ]
+then 	
+	removeAliases "PRODUCTION-$version_name" 'PostLambdaRequestVPC'
+	removeAliases "PRODUCTION-$version_name" 'GetLambdaRequestVPC'
+	removeAliases "PRODUCTION-$version_name" 'PutLambdaRequestVPC'
+	removeAliases "PRODUCTION-$version_name" 'LambdasInvoker'
+	removeAliases "PRODUCTION-$version_name" 'NetworkLambda'
+	removeAliases "PRODUCTION-$version_name" 'AMANotificationsManagerVPC'
+else
+	removeAliases "$envName-$version_name" "$lambdaName"
+fi
